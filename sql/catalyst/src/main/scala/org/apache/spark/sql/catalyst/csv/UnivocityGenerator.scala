@@ -22,7 +22,8 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, IntervalStringStyles, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
@@ -44,11 +45,14 @@ class UnivocityGenerator(
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
-    options.locale)
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
@@ -56,6 +60,16 @@ class UnivocityGenerator(
 
     case TimestampType =>
       (row: InternalRow, ordinal: Int) => timestampFormatter.format(row.getLong(ordinal))
+
+    case YearMonthIntervalType(start, end) =>
+      (row: InternalRow, ordinal: Int) =>
+        IntervalUtils.toYearMonthIntervalString(
+          row.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+
+    case DayTimeIntervalType(start, end) =>
+      (row: InternalRow, ordinal: Int) =>
+      IntervalUtils.toDayTimeIntervalString(
+        row.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 

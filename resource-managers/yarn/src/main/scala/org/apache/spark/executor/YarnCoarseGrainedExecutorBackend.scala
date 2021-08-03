@@ -21,7 +21,9 @@ import java.net.URL
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.Client
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.YarnContainerInfoHelper
 
@@ -37,9 +39,9 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     bindAddress: String,
     hostname: String,
     cores: Int,
-    userClassPath: Seq[URL],
     env: SparkEnv,
-    resourcesFile: Option[String])
+    resourcesFile: Option[String],
+    resourceProfile: ResourceProfile)
   extends CoarseGrainedExecutorBackend(
     rpcEnv,
     driverUrl,
@@ -47,11 +49,14 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
     bindAddress,
     hostname,
     cores,
-    userClassPath,
     env,
-    resourcesFile) with Logging {
+    resourcesFile,
+    resourceProfile) with Logging {
 
   private lazy val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(env.conf)
+
+  override def getUserClassPath: Seq[URL] =
+    Client.getUserClasspathUrls(env.conf, useClusterPath = true)
 
   override def extractLogUrls: Map[String, String] = {
     YarnContainerInfoHelper.getLogUrls(hadoopConfiguration, container = None)
@@ -67,11 +72,11 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv) =>
-      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env) =>
+    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv, ResourceProfile) =>
+      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath, env,
-        arguments.resourcesFileOpt)
+        arguments.bindAddress, arguments.hostname, arguments.cores,
+        env, arguments.resourcesFileOpt, resourceProfile)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
       this.getClass.getCanonicalName.stripSuffix("$"))

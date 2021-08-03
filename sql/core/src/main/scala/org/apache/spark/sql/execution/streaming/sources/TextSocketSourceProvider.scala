@@ -26,31 +26,33 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
+import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketSourceProvider extends TableProvider with DataSourceRegister with Logging {
+class TextSocketSourceProvider extends SimpleTableProvider with DataSourceRegister with Logging {
 
   private def checkParameters(params: CaseInsensitiveStringMap): Unit = {
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
     if (!params.containsKey("host")) {
-      throw new AnalysisException("Set a host to read from with option(\"host\", ...).")
+      throw QueryCompilationErrors.hostOptionNotSetError()
     }
     if (!params.containsKey("port")) {
-      throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
+      throw QueryCompilationErrors.portOptionNotSetError()
     }
     Try {
       params.getBoolean("includeTimestamp", false)
     } match {
       case Success(_) =>
       case Failure(_) =>
-        throw new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
+        throw QueryCompilationErrors.invalidIncludeTimestampValueError()
     }
   }
 
